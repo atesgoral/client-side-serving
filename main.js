@@ -19,14 +19,6 @@ const lineReader = {
   }
 };
 
-const bodyDecoders = {
-  'application/x-www-form-urlencoded': {
-    decode(body) {
-      return body;
-    }
-  }
-}
-
 const httpRequestReader = {
   state: 'RECEIVE_REQUEST_LINE',
   request: null,
@@ -101,8 +93,85 @@ const httpRequestReader = {
 
 lineReader.onLine = (line) => httpRequestReader.onLine(line);
 
-httpRequestReader.onRequest = (request) => {
+const bodyDecoders = {
+  'text/plain': {
+    decode(body) {
+      return body;
+    }
+  },
+  'application/x-www-form-urlencoded': {
+    decode(body) {
+      return Object.fromEntries(
+        body
+          .split('&')
+          .map((kvPair) => kvPair.split('=').map(decodeURIComponent))
+      );
+    }
+  },
+  'application/json': {
+    decode(body) {
+      return JSON.parse(body);
+    }
+  }
+}
+
+async function bodyDecoderMiddleware(request) {
+  const bodyDecoder = bodyDecoders[request.contentType];
+
+  if (bodyDecoder) {
+    request.body = bodyDecoder.decode(request.body);
+  }
+}
+
+async function queryStringParserMiddleware(request) {
+  // @TODO
+}
+
+const requestHandler = {
+  firstMiddlewareNode: null,
+  lastMiddlewareNode: null,
+  useMiddleware(middleware) {
+    const middlewareNode = { middleware };
+
+    if (this.lastMiddlewareNode) {
+      this.lastMiddlewareNode.next = middlewareNode;
+    } else {
+      this.firstMiddlewareNode = middlewareNode;
+    }
+
+    this.lastMiddlewareNode = middlewareNode;
+  },
+  async invokeMiddleware(request, response) {
+    let middlewareNode = this.firstMiddlewareNode;
+
+    let propagate = true;
+
+    while (middlewareNode && propagate) {
+      try {
+        propagate = await middlewareNode.middleware(request, response);
+
+        if (propagate) {
+          middlewareNode = middlewareNode.next;
+        }
+      } catch (error) {
+        break;
+      }
+    }
+  }
+}
+
+requestHandler.useMiddleware(bodyDecoderMiddleware);
+
+httpRequestReader.onRequest = async (request) => {
   console.log('Received request', request);
+
+  const response = { statusCode: 200, statusText: 'OK' };
+
+  await requestHandler.invokeMiddleware(request, response);
+
+  console.log('Returning response', response);
+
+  return response;
 }
 
 const choppyTransport = {
@@ -175,7 +244,7 @@ function encodeRequest(request) {
 const bodyEncoders = {
   'text/plain': {
     encode(body) {
-      return String(body);
+      return body;
     }
   },
   'application/x-www-form-urlencoded': {
