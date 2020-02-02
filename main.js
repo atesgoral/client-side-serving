@@ -2,20 +2,20 @@ const CRLF = '\r\n';
 
 const lineReader = {
   buffer: '',
-  write(data) {
-    let combined = this.buffer + data;
+  write(chunk) {
+    this.buffer += chunk;
 
     do {
-      const idx = combined.indexOf(CRLF);
+      const idx = this.buffer.indexOf(CRLF);
 
       if (idx === -1) {
-        this.buffer = combined;
         return;
       }
 
-      this.onLine(combined.substr(0, idx));
-      combined = combined.substr(idx + CRLF.length);
-    } while (combined.length);
+      const line = this.buffer.substr(0, idx);
+      this.buffer = this.buffer.substr(idx + CRLF.length);
+      this.onLine(line);
+    } while (this.buffer.length);
   }
 };
 
@@ -30,20 +30,14 @@ const bodyDecoders = {
 const httpRequestReader = {
   state: 'RECEIVE_REQUEST_LINE',
   request: null,
-  write(data) {
+  write(chunk) {
     switch (this.state) {
       case 'RECEIVE_REQUEST_LINE':
       case 'RECEIVE_HEADERS':
-        lineReader.write(data);
+        lineReader.write(chunk);
         break;
       case 'RECEIVE_BODY':
-        this.request.body += data;
-
-        console.log(this.request.body.length, this.request.body);
-        if (this.request.body.length === this.request.contentLength) {
-          this.state = 'END';
-          console.log(this.request);
-        }
+        this.addBodyChunk(chunk)
         break;
     }
   },
@@ -51,6 +45,7 @@ const httpRequestReader = {
     switch (this.state) {
       case 'RECEIVE_REQUEST_LINE':
         this.parseRequestLine(line);
+        this.request.headers = {};
         this.state = 'RECEIVE_HEADERS';
         break;
       case 'RECEIVE_HEADERS':
@@ -59,8 +54,14 @@ const httpRequestReader = {
         } else {
           this.request.contentLength = parseInt(this.request.headers['Content-Length']);
           this.request.contentType = this.request.headers['Content-Type'];
-          this.state = 'RECEIVE_BODY';
-          this.onRequest(this.request);
+
+          if (this.request.contentLength) {
+            this.state = 'RECEIVE_BODY';
+            this.request.body = '';
+            this.addBodyChunk(lineReader.buffer);
+          } else {
+            this.end();
+          }
         }
         break;
     }
@@ -72,7 +73,7 @@ const httpRequestReader = {
       console.error('Malformed request line');
       this.state = 'BAD_REQUEST';
     } else {
-      this.request = { method, path, protocol, headers: {}, body: '' };
+      this.request = { method, path, protocol };
     }
   },
   parseHeader(line) {
@@ -85,6 +86,17 @@ const httpRequestReader = {
       this.request.headers[key] = value;
     }
   },
+  addBodyChunk(chunk) {
+    this.request.body += chunk;
+
+    if (this.request.body.length === this.request.contentLength) {
+      this.end();
+    }
+  },
+  end() {
+    this.state = 'END';
+    this.onRequest(this.request);
+  }
 };
 
 lineReader.onLine = (line) => httpRequestReader.onLine(line);
@@ -97,24 +109,31 @@ const choppyTransport = {
   queue: [],
   timer: null,
   sendChunk(chunk) {
+    this.queue.push(chunk);
+
     if (this.timer === null) {
-      this.timer = setTimeout(() => {
-        this.timer = null;
-        this.rx(chunk);
-        if (this.queue.length) {
-          this.sendChunk(this.queue.shift());
-        }
-      }, Math.random() * 250);
-    } else {
-      this.queue.push(chunk);
+      this.startTimer();
     }
+  },
+  startTimer() {
+    this.timer = setTimeout(() => {
+      const chunk = this.queue.shift();
+      console.log('RX chunk', `(${chunk.length}) ${JSON.stringify(chunk)}`);
+      this.rx(chunk);
+
+      if (this.queue.length) {
+        this.startTimer();
+      } else {
+        this.timer = null;
+      }
+    }, Math.random() * 500);
   },
   tx(data) {
     let remaining = data;
     let chunkLength = 0;
 
     do {
-      chunkLength = Math.round(Math.random() * remaining.length);
+      chunkLength = Math.round(Math.random() * (remaining.length - 1)) + 1;
       this.sendChunk(remaining.substr(0, chunkLength));
       remaining = remaining.substr(chunkLength);
     } while (remaining.length);
