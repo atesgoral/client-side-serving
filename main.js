@@ -1,6 +1,9 @@
 import { Socket } from './lib/socket.js';
 import { cookieMiddleware } from './lib/middleware/cookieMiddleware.js';
 import { sessionMiddleware } from './lib/middleware/sessionMiddleware.js';
+import { bodyDecoderMiddleware } from './lib/middleware/bodyDecoderMiddleware.js';
+import { queryStringDecoderMiddleware } from './lib/middleware/queryStringDecoderMiddleware.js';
+import { encodeParams as urlEncodeParams } from './lib/url.js';
 
 // const clientSocket = new Socket();
 // const serverSocket = new Socket();
@@ -114,48 +117,6 @@ const httpRequestReader = {
 
 lineReader.onLine = (line) => httpRequestReader.onLine(line);
 
-function urlDecodeParams(encoded) {
-  return Object.fromEntries(
-    encoded
-      .split('&')
-      .map((kvPair) => kvPair.split('=').map(decodeURIComponent))
-  );
-}
-
-const bodyDecoders = {
-  'text/plain': {
-    decode(body) {
-      return body;
-    }
-  },
-  'application/x-www-form-urlencoded': {
-    decode: urlDecodeParams
-  },
-  'application/json': {
-    decode: JSON.parse
-  }
-}
-
-async function bodyDecoderMiddleware(request) {
-  const bodyDecoder = bodyDecoders[request.contentType];
-
-  if (bodyDecoder) {
-    request.body = bodyDecoder.decode(request.body);
-  }
-
-  return true;
-}
-
-async function queryStringParserMiddleware(request) {
-  const [match, queryString] = /^.+?\?(.+)$/.exec(request.path);
-
-  if (match) {
-    request.queryParams = urlDecodeParams(queryString);
-  }
-
-  return true;
-}
-
 const requestHandler = {
   firstMiddlewareNode: null,
   lastMiddlewareNode: null,
@@ -202,7 +163,7 @@ function applicationMiddleware(_, response) {
 requestHandler.useMiddleware(cookieMiddleware);
 requestHandler.useMiddleware(sessionMiddleware);
 requestHandler.useMiddleware(bodyDecoderMiddleware);
-requestHandler.useMiddleware(queryStringParserMiddleware);
+requestHandler.useMiddleware(queryStringDecoderMiddleware);
 requestHandler.useMiddleware(applicationMiddleware);
 
 function encodeStatusLine({ protocol, statusCode, statusText }) {
@@ -301,14 +262,6 @@ function encodeRequest(request) {
     .concat(CRLF)
     .join(CRLF)
     .concat(encodeBody(request));
-}
-
-function urlEncodeParams(params) {
-  return Object.entries(params)
-    .map(([ key, value ]) => {
-      return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
-    })
-    .join('&');
 }
 
 const bodyEncoders = {
