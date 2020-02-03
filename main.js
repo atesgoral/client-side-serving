@@ -1,5 +1,5 @@
 import { Socket } from './lib/socket.js';
-import { cookieMiddleware } from './lib/middleware/cookieMiddleware.js';
+import { cookieDecoderMiddleware } from './lib/middleware/cookieDecoderMiddleware.js';
 import { sessionMiddleware } from './lib/middleware/sessionMiddleware.js';
 import { bodyDecoderMiddleware } from './lib/middleware/bodyDecoderMiddleware.js';
 import { queryStringDecoderMiddleware } from './lib/middleware/queryStringDecoderMiddleware.js';
@@ -160,7 +160,7 @@ function applicationMiddleware(_, response) {
   return false;
 }
 
-requestHandler.useMiddleware(cookieMiddleware);
+requestHandler.useMiddleware(cookieDecoderMiddleware);
 requestHandler.useMiddleware(sessionMiddleware);
 requestHandler.useMiddleware(bodyDecoderMiddleware);
 requestHandler.useMiddleware(queryStringDecoderMiddleware);
