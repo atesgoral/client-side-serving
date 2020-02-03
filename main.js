@@ -1,3 +1,22 @@
+import { Socket } from './lib/socket.js';
+
+// const clientSocket = new Socket();
+// const serverSocket = new Socket();
+
+// serverSocket.listen('foo');
+// serverSocket.onReceive = (data) => {
+//   console.log('Server received', data);
+//   serverSocket.send('Pong');
+// };
+
+// clientSocket.connect('foo');
+// clientSocket.onReceive = (data) => {
+//   console.log('Client received', data);
+// };
+
+// clientSocket.connect('foo');
+// clientSocket.send('Some data');
+
 const CRLF = '\r\n';
 
 const lineReader = {
