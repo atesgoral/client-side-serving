@@ -93,6 +93,14 @@ const httpRequestReader = {
 
 lineReader.onLine = (line) => httpRequestReader.onLine(line);
 
+function urlDecodeParams(encoded) {
+  return Object.fromEntries(
+    encoded
+      .split('&')
+      .map((kvPair) => kvPair.split('=').map(decodeURIComponent))
+  );
+}
+
 const bodyDecoders = {
   'text/plain': {
     decode(body) {
@@ -100,18 +108,10 @@ const bodyDecoders = {
     }
   },
   'application/x-www-form-urlencoded': {
-    decode(body) {
-      return Object.fromEntries(
-        body
-          .split('&')
-          .map((kvPair) => kvPair.split('=').map(decodeURIComponent))
-      );
-    }
+    decode: urlDecodeParams
   },
   'application/json': {
-    decode(body) {
-      return JSON.parse(body);
-    }
+    decode: JSON.parse
   }
 }
 
@@ -121,10 +121,18 @@ async function bodyDecoderMiddleware(request) {
   if (bodyDecoder) {
     request.body = bodyDecoder.decode(request.body);
   }
+
+  return true;
 }
 
 async function queryStringParserMiddleware(request) {
-  // @TODO
+  const [match, queryString] = /^.+?\?(.+)$/.exec(request.path);
+
+  if (match) {
+    request.queryParams = urlDecodeParams(queryString);
+  }
+
+  return true;
 }
 
 const requestHandler = {
@@ -160,18 +168,46 @@ const requestHandler = {
   }
 }
 
+function helloWorldMiddleware(_, response) {
+  response.body = 'Hello World!';
+  response.headers['Content-Type'] = 'text/plain';
+  response.headers['Content-Length'] = response.body.length;
+  return false;
+}
+
 requestHandler.useMiddleware(bodyDecoderMiddleware);
+requestHandler.useMiddleware(queryStringParserMiddleware);
+requestHandler.useMiddleware(helloWorldMiddleware);
+
+function encodeStatusLine({ protocol, statusCode, statusText }) {
+  return `${protocol} ${statusCode} ${statusText}`;
+}
+
+function encodeResponse(response) {
+  return [ encodeStatusLine(response) ]
+    .concat(encodeHeaders(response))
+    .concat(CRLF)
+    .join(CRLF)
+    .concat(encodeBody(response));
+}
 
 httpRequestReader.onRequest = async (request) => {
   console.log('Received request', request);
 
-  const response = { statusCode: 200, statusText: 'OK' };
+  const response = {
+    protocol: 'HTTP/1.1',
+    statusCode: 200,
+    statusText: 'OK',
+    headers: {}
+  };
 
   await requestHandler.invokeMiddleware(request, response);
 
   console.log('Returning response', response);
 
-  return response;
+  const encodedResponse = encodeResponse(response);
+
+  console.log(JSON.stringify(encodedResponse));
 }
 
 const choppyTransport = {
@@ -241,6 +277,14 @@ function encodeRequest(request) {
     .concat(encodeBody(request));
 }
 
+function urlEncodeParams(params) {
+  return Object.entries(params)
+    .map(([ key, value ]) => {
+      return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+    })
+    .join('&');
+}
+
 const bodyEncoders = {
   'text/plain': {
     encode(body) {
@@ -248,36 +292,58 @@ const bodyEncoders = {
     }
   },
   'application/x-www-form-urlencoded': {
-    encode(body) {
-      return Object.entries(body)
-        .map(([ key, value ]) => {
-          return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
-        })
-        .join('&');
-    }
+    encode: urlEncodeParams
   },
   'application/json': {
-    encode(body) {
-      return JSON.stringify(body);
-    }
+    encode: JSON.stringify
   }
 };
 
-const form = {
+const contentType = 'application/x-www-form-urlencoded';
+const body = bodyEncoders['application/x-www-form-urlencoded'].encode({
   a: 1,
   b: 2
+});
+const queryString = urlEncodeParams({
+  c: 3,
+  d: 4
+});
+
+const cookieJar = {
+  cookies: [],
+  setCookie(value, expiry) {
+    this.cookies.push({ value, expiry });
+  },
+  cullExpiredCookies() {
+    const now = new Date();
+    this.cookies = this.cookies
+      .filter((cookie) => !cookie.expiry || cookie.expiry > now);
+  },
+  getActiveCookies() {
+    const now = new Date();
+    return this.cookies
+      .filter((cookie) => !cookie.expiry || cookie.expiry > now)
+      .map((cookie) => cookie.value);
+  }
 };
-const contentType = 'application/x-www-form-urlencoded';
-const body = bodyEncoders['application/x-www-form-urlencoded'].encode(form);
+
+function encodeCookies(cookies) {
+  return cookies.join('; ');
+}
+
+cookieJar.setCookie('foo', new Date(Date.now() + 1000));
+
+const cookies = encodeCookies(cookieJar.getActiveCookies());
 
 const request = {
   protocol: 'HTTP/1.1',
   method: 'POST',
-  path: '/hello',
+  path: `/hello/world?${queryString}`,
   headers: {
     'User-Agent': 'Secret Agent 0.0.7',
     'Content-Type': contentType,
-    'Content-Length': body.length
+    'Content-Length': body.length,
+    'Cookie': cookies
   },
   body
 };
