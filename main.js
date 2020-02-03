@@ -4,6 +4,7 @@ import { sessionMiddleware } from './lib/middleware/sessionMiddleware.js';
 import { bodyDecoderMiddleware } from './lib/middleware/bodyDecoderMiddleware.js';
 import { queryStringDecoderMiddleware } from './lib/middleware/queryStringDecoderMiddleware.js';
 import { encodeParams as urlEncodeParams } from './lib/url.js';
+import { encodeCookieHeader } from './lib/cookie.js';
 
 // const clientSocket = new Socket();
 // const serverSocket = new Socket();
@@ -306,13 +307,9 @@ const cookieJar = {
   }
 };
 
-function encodeCookies(cookies) {
-  return cookies.join('; ');
-}
-
 cookieJar.setCookie('foo', new Date(Date.now() + 1000));
 
-const cookies = encodeCookies(cookieJar.getActiveCookies());
+const cookies = encodeCookieHeader(cookieJar.getActiveCookies());
 
 const request = {
   protocol: 'HTTP/1.1',
