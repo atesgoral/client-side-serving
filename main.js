@@ -168,7 +168,7 @@ const requestHandler = {
   }
 }
 
-function helloWorldMiddleware(_, response) {
+function applicationMiddleware(_, response) {
   response.body = 'Hello World!';
   response.headers['Content-Type'] = 'text/plain';
   response.headers['Content-Length'] = response.body.length;
@@ -177,7 +177,7 @@ function helloWorldMiddleware(_, response) {
 
 requestHandler.useMiddleware(bodyDecoderMiddleware);
 requestHandler.useMiddleware(queryStringParserMiddleware);
-requestHandler.useMiddleware(helloWorldMiddleware);
+requestHandler.useMiddleware(applicationMiddleware);
 
 function encodeStatusLine({ protocol, statusCode, statusText }) {
   return `${protocol} ${statusCode} ${statusText}`;
