@@ -1,8 +1,8 @@
 import { Socket } from './lib/socket.js';
-import { cookieDecoderMiddleware } from './lib/middleware/cookieDecoderMiddleware.js';
+import { cookieDecoderMiddleware } from './lib/middleware/cookieMiddleware.js';
 import { sessionMiddleware } from './lib/middleware/sessionMiddleware.js';
-import { bodyDecoderMiddleware } from './lib/middleware/bodyDecoderMiddleware.js';
-import { queryStringDecoderMiddleware } from './lib/middleware/queryStringDecoderMiddleware.js';
+import { bodyDecoderMiddleware } from './lib/middleware/bodyMiddleware.js';
+import { queryStringDecoderMiddleware } from './lib/middleware/queryStringMiddleware.js';
 import { encodeParams as urlEncodeParams } from './lib/url.js';
 import { encodeCookieHeader } from './lib/cookie.js';
 
