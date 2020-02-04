@@ -1,10 +1,10 @@
 import { Socket } from './lib/socket.js';
-import { cookieDecoderMiddleware } from './lib/middleware/cookieMiddleware.js';
+import { commonHeaderEncoderMiddleware, commonHeaderDecoderMiddleware } from './lib/middleware/commonHeaderMiddleware.js';
+import { cookieEncoderMiddleware, cookieDecoderMiddleware } from './lib/middleware/cookieMiddleware.js';
 import { sessionMiddleware } from './lib/middleware/sessionMiddleware.js';
-import { bodyDecoderMiddleware } from './lib/middleware/bodyMiddleware.js';
+import { bodyEncoderMiddleware, bodyDecoderMiddleware } from './lib/middleware/bodyMiddleware.js';
 import { queryStringDecoderMiddleware } from './lib/middleware/queryStringMiddleware.js';
 import { encodeParams as urlEncodeParams } from './lib/url.js';
-import { encodeCookieHeader } from './lib/cookie.js';
 
 // const clientSocket = new Socket();
 // const serverSocket = new Socket();
@@ -69,8 +69,7 @@ const httpRequestReader = {
         if (line !== '') {
           this.parseHeader(line);
         } else {
-          this.request.contentLength = parseInt(this.request.headers['Content-Length']);
-          this.request.contentType = this.request.headers['Content-Type'];
+          commonHeaderDecoderMiddleware(this.request);
 
           if (this.request.contentLength) {
             this.state = 'RECEIVE_BODY';
@@ -265,30 +264,6 @@ function encodeRequest(request) {
     .concat(encodeBody(request));
 }
 
-const bodyEncoders = {
-  'text/plain': {
-    encode(body) {
-      return body;
-    }
-  },
-  'application/x-www-form-urlencoded': {
-    encode: urlEncodeParams
-  },
-  'application/json': {
-    encode: JSON.stringify
-  }
-};
-
-const contentType = 'application/x-www-form-urlencoded';
-const body = bodyEncoders['application/x-www-form-urlencoded'].encode({
-  a: 1,
-  b: 2
-});
-const queryString = urlEncodeParams({
-  c: 3,
-  d: 4
-});
-
 const cookieJar = {
   cookies: [],
   setCookie(value, expiry) {
@@ -309,20 +284,29 @@ const cookieJar = {
 
 cookieJar.setCookie('foo', new Date(Date.now() + 1000));
 
-const cookies = encodeCookieHeader(cookieJar.getActiveCookies());
+const queryString = urlEncodeParams({
+  c: 3,
+  d: 4
+});
 
 const request = {
   protocol: 'HTTP/1.1',
   method: 'POST',
   path: `/hello/world?${queryString}`,
   headers: {
-    'User-Agent': 'Secret Agent 0.0.7',
-    'Content-Type': contentType,
-    'Content-Length': body.length,
-    'Cookie': cookies
+    'User-Agent': 'Secret Agent 0.0.7'
   },
-  body
+  cookies: cookieJar.getActiveCookies(),
+  contentType: 'application/x-www-form-urlencoded',
+  body: {
+    a: 1,
+    b: 2
+  }
 };
+
+bodyEncoderMiddleware(request);
+commonHeaderEncoderMiddleware(request);
+cookieEncoderMiddleware(request);
 
 const encodedRequest = encodeRequest(request);
 
