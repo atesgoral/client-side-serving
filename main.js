@@ -8,7 +8,36 @@ import { encodeParams as urlEncodeParams } from './lib/url.js';
 
 import { LineTransformStream } from './lib/lineTransformStream.js';
 
+const raw = new ReadableStream({
+  start(controller) {
+    const encoder = new TextEncoder();
+    controller.enqueue(encoder.encode('Hello\r\nWorld!\r\nExtra'));
+    controller.close();
+  },
+  pull(controller) {
+    console.log('pull');
+  },
+  cancel() {
+    console.log('cancel');
+  }
+});
+
 const xform = new LineTransformStream();
+
+const lines = raw.pipeThrough(xform).getReader();
+
+function readNextLine() {
+  lines.read().then(({ done, value: line }) => {
+    if (done) {
+      console.log('EOF');
+    } else {
+      console.log('line:', line);
+      readNextLine();
+    }
+  });
+}
+
+readNextLine();
 
 // const clientSocket = new Socket();
 // const serverSocket = new Socket();
