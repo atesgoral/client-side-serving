@@ -6,6 +6,10 @@ import { bodyEncoderMiddleware, bodyDecoderMiddleware } from './lib/middleware/b
 import { queryStringDecoderMiddleware } from './lib/middleware/queryStringMiddleware.js';
 import { encodeParams as urlEncodeParams } from './lib/url.js';
 
+import { LineTransformStream } from './lib/lineTransformStream.js';
+
+const xform = new LineTransformStream();
+
 // const clientSocket = new Socket();
 // const serverSocket = new Socket();
 
