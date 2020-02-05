@@ -6,7 +6,7 @@ import { bodyEncoderMiddleware, bodyDecoderMiddleware } from './lib/middleware/b
 import { queryStringDecoderMiddleware } from './lib/middleware/queryStringMiddleware.js';
 import { encodeParams as urlEncodeParams } from './lib/url.js';
 
-import { LineTransformStream } from './lib/lineTransformStream.js';
+import { LineParserStream } from './lib/lineParserStream.js';
 
 const raw = new ReadableStream({
   start(controller) {
@@ -22,7 +22,7 @@ const raw = new ReadableStream({
   }
 });
 
-const xform = new LineTransformStream();
+const xform = new LineParserStream();
 
 const lines = raw.pipeThrough(xform).getReader();
 
