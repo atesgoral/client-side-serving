@@ -6,55 +6,8 @@ import { bodyEncoderMiddleware, bodyDecoderMiddleware } from './lib/middleware/b
 import { queryStringDecoderMiddleware } from './lib/middleware/queryStringMiddleware.js';
 import { encodeParams as urlEncodeParams } from './lib/url.js';
 
-import { LineParserStream } from './lib/lineParserStream.js';
-
-const raw = new ReadableStream({
-  start(controller) {
-    const encoder = new TextEncoder();
-    controller.enqueue(encoder.encode('Hello\r\nWorld!\r\nExtra'));
-    controller.close();
-  },
-  pull(controller) {
-    console.log('pull');
-  },
-  cancel() {
-    console.log('cancel');
-  }
-});
-
-const xform = new LineParserStream();
-
-const lines = raw.pipeThrough(xform).getReader();
-
-function readNextLine() {
-  lines.read().then(({ done, value: line }) => {
-    if (done) {
-      console.log('EOF');
-    } else {
-      console.log('line:', line);
-      readNextLine();
-    }
-  });
-}
-
-readNextLine();
-
-// const clientSocket = new Socket();
-// const serverSocket = new Socket();
-
-// serverSocket.listen('foo');
-// serverSocket.onReceive = (data) => {
-//   console.log('Server received', data);
-//   serverSocket.send('Pong');
-// };
-
-// clientSocket.connect('foo');
-// clientSocket.onReceive = (data) => {
-//   console.log('Client received', data);
-// };
-
-// clientSocket.connect('foo');
-// clientSocket.send('Some data');
+import { HttpRequestParser } from './lib/httpRequestParser.js';
+import { HttpRequestParserStream } from './lib/httpRequestParserStream.js';
 
 const CRLF = '\r\n';
 
@@ -343,4 +296,64 @@ cookieEncoderMiddleware(request);
 
 const encodedRequest = encodeRequest(request);
 
-socket.send(encodedRequest);
+// socket.send(encodedRequest);
+
+// const raw = new ReadableStream({
+//   start(controller) {
+//     const encoder = new TextEncoder();
+//     controller.enqueue(encoder.encode(encodedRequest));
+//     controller.close();
+//   },
+//   pull(controller) {
+//     console.log('pull');
+//   },
+//   cancel() {
+//     console.log('cancel');
+//   }
+// });
+
+const httpRequestParser = new HttpRequestParser();
+const encoder = new TextEncoder();
+
+console.log(encodedRequest);
+
+httpRequestParser.onHttpRequest = async (request) => {
+  console.log('Got request:', request);
+  const body = await request.getBody();
+  console.log('Got body:', body);
+};
+
+httpRequestParser.addData(encoder.encode(encodedRequest));
+
+// const lines = raw.pipeThrough(xform).getReader();
+
+// function readNextLine() {
+//   lines.read().then(({ done, value: line }) => {
+//     if (done) {
+//       console.log('EOF');
+//     } else {
+//       console.log('line:', line);
+//       readNextLine();
+//     }
+//   });
+// }
+
+// readNextLine();
+
+// const clientSocket = new Socket();
+// const serverSocket = new Socket();
+
+// serverSocket.listen('foo');
+// serverSocket.onReceive = (data) => {
+//   console.log('Server received', data);
+//   serverSocket.send('Pong');
+// };
+
+// clientSocket.connect('foo');
+// clientSocket.onReceive = (data) => {
+//   console.log('Client received', data);
+// };
+
+// clientSocket.connect('foo');
+// clientSocket.send('Some data');
+
