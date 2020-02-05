@@ -7,101 +7,11 @@ import { queryStringDecoderMiddleware } from './lib/middleware/queryStringMiddle
 import { encodeParams as urlEncodeParams } from './lib/url.js';
 
 import { HttpRequestParser } from './lib/httpRequestParser.js';
+import { HttpRequestFormatter } from './lib/httpRequestFormatter.js';
 import { HttpRequestParserStream } from './lib/httpRequestParserStream.js';
+import { HttpResponseFormatter } from './lib/httpResponseFormatter.js';
 
 const CRLF = '\r\n';
-
-const lineReader = {
-  buffer: '',
-  write(chunk) {
-    this.buffer += chunk;
-
-    do {
-      const idx = this.buffer.indexOf(CRLF);
-
-      if (idx === -1) {
-        return;
-      }
-
-      const line = this.buffer.substr(0, idx);
-      this.buffer = this.buffer.substr(idx + CRLF.length);
-      this.onLine(line);
-    } while (this.buffer.length);
-  }
-};
-
-const httpRequestReader = {
-  state: 'RECEIVE_REQUEST_LINE',
-  request: null,
-  write(chunk) {
-    switch (this.state) {
-      case 'RECEIVE_REQUEST_LINE':
-      case 'RECEIVE_HEADERS':
-        lineReader.write(chunk);
-        break;
-      case 'RECEIVE_BODY':
-        this.addBodyChunk(chunk)
-        break;
-    }
-  },
-  onLine(line) {
-    switch (this.state) {
-      case 'RECEIVE_REQUEST_LINE':
-        this.parseRequestLine(line);
-        this.request.headers = {};
-        this.state = 'RECEIVE_HEADERS';
-        break;
-      case 'RECEIVE_HEADERS':
-        if (line !== '') {
-          this.parseHeader(line);
-        } else {
-          commonHeaderDecoderMiddleware(this.request);
-
-          if (this.request.contentLength) {
-            this.state = 'RECEIVE_BODY';
-            this.request.body = '';
-            this.addBodyChunk(lineReader.buffer);
-          } else {
-            this.end();
-          }
-        }
-        break;
-    }
-  },
-  parseRequestLine(line) {
-    const [match, method, path, protocol] = /^(.+?) (.+?) (.+)$/.exec(line);
-
-    if (!match) {
-      console.error('Malformed request line');
-      this.state = 'BAD_REQUEST';
-    } else {
-      this.request = { method, path, protocol };
-    }
-  },
-  parseHeader(line) {
-    const [match, key, value] = /^(.+?): (.+)$/.exec(line);
-
-    if (!match) {
-      console.error('Malformed header');
-      this.state = 'BAD_REQUEST';
-    } else {
-      this.request.headers[key] = value;
-    }
-  },
-  addBodyChunk(chunk) {
-    this.request.body += chunk;
-
-    if (this.request.body.length === this.request.contentLength) {
-      this.end();
-    }
-  },
-  end() {
-    this.state = 'END';
-    this.onRequest(this.request);
-  }
-};
-
-lineReader.onLine = (line) => httpRequestReader.onLine(line);
 
 const requestHandler = {
   firstMiddlewareNode: null,
@@ -152,20 +62,71 @@ requestHandler.useMiddleware(bodyDecoderMiddleware);
 requestHandler.useMiddleware(queryStringDecoderMiddleware);
 requestHandler.useMiddleware(applicationMiddleware);
 
-function encodeStatusLine({ protocol, statusCode, statusText }) {
-  return `${protocol} ${statusCode} ${statusText}`;
-}
+// const choppyTransport = {
+//   queue: [],
+//   timer: null,
+//   sendChunk(chunk) {
+//     this.queue.push(chunk);
 
-function encodeResponse(response) {
-  return [ encodeStatusLine(response) ]
-    .concat(encodeHeaders(response))
-    .concat(CRLF)
-    .join(CRLF)
-    .concat(encodeBody(response));
-}
+//     if (this.timer === null) {
+//       this.startTimer();
+//     }
+//   },
+//   startTimer() {
+//     this.timer = setTimeout(() => {
+//       const chunk = this.queue.shift();
+//       console.log('RX chunk', `(${chunk.length}) ${JSON.stringify(chunk)}`);
+//       this.rx(chunk);
 
-httpRequestReader.onRequest = async (request) => {
-  console.log('Received request', request);
+//       if (this.queue.length) {
+//         this.startTimer();
+//       } else {
+//         this.timer = null;
+//       }
+//     }, Math.random() * 500);
+//   },
+//   tx(data) {
+//     let remaining = data;
+//     let chunkLength = 0;
+
+//     do {
+//       chunkLength = Math.round(Math.random() * (remaining.length - 1)) + 1;
+//       this.sendChunk(remaining.substr(0, chunkLength));
+//       remaining = remaining.substr(chunkLength);
+//     } while (remaining.length);
+//   }
+// };
+
+// choppyTransport.rx = (data) => httpRequestReader.write(data);
+
+// const socket = {
+//   send(data) {
+//     choppyTransport.tx(data);
+//   }
+// };
+
+// socket.send(encodedRequest);
+
+// const raw = new ReadableStream({
+//   start(controller) {
+//     const encoder = new TextEncoder();
+//     controller.enqueue(encoder.encode(encodedRequest));
+//     controller.close();
+//   },
+//   pull(controller) {
+//     console.log('pull');
+//   },
+//   cancel() {
+//     console.log('cancel');
+//   }
+// });
+
+const httpRequestParser = new HttpRequestParser();
+
+httpRequestParser.onHttpRequest = async (request) => {
+  console.log('Got request:', request);
+  const body = await request.getBody();
+  console.log('Got body:', body);
 
   const response = {
     protocol: 'HTTP/1.1',
@@ -178,77 +139,19 @@ httpRequestReader.onRequest = async (request) => {
 
   console.log('Returning response', response);
 
-  const encodedResponse = encodeResponse(response);
+  const httpResponseFormatter = new HttpResponseFormatter();
 
-  console.log(JSON.stringify(encodedResponse));
-}
+  httpResponseFormatter.onData = (data) => {
+    const decoder = new TextDecoder();
+    console.log(JSON.stringify(decoder.decode(data)));
+  };
 
-const choppyTransport = {
-  queue: [],
-  timer: null,
-  sendChunk(chunk) {
-    this.queue.push(chunk);
+  httpResponseFormatter.onEnd = () => {
+    console.log('--END--');
+  };
 
-    if (this.timer === null) {
-      this.startTimer();
-    }
-  },
-  startTimer() {
-    this.timer = setTimeout(() => {
-      const chunk = this.queue.shift();
-      console.log('RX chunk', `(${chunk.length}) ${JSON.stringify(chunk)}`);
-      this.rx(chunk);
-
-      if (this.queue.length) {
-        this.startTimer();
-      } else {
-        this.timer = null;
-      }
-    }, Math.random() * 500);
-  },
-  tx(data) {
-    let remaining = data;
-    let chunkLength = 0;
-
-    do {
-      chunkLength = Math.round(Math.random() * (remaining.length - 1)) + 1;
-      this.sendChunk(remaining.substr(0, chunkLength));
-      remaining = remaining.substr(chunkLength);
-    } while (remaining.length);
-  }
+  httpResponseFormatter.format(response);
 };
-
-choppyTransport.rx = (data) => httpRequestReader.write(data);
-
-const socket = {
-  send(data) {
-    choppyTransport.tx(data);
-  }
-};
-
-function encodeRequestLine({ protocol, method, path }) {
-  return `${method} ${path} ${protocol}`;
-}
-
-function encodeHeader([ key, value ]) {
-  return `${key}: ${value}`;
-}
-
-function encodeHeaders({ headers }) {
-  return Object.entries(headers).map(encodeHeader);
-}
-
-function encodeBody({ body }) {
-  return typeof body !== 'undefined' ? body : '';
-}
-
-function encodeRequest(request) {
-  return [ encodeRequestLine(request) ]
-    .concat(encodeHeaders(request))
-    .concat(CRLF)
-    .join(CRLF)
-    .concat(encodeBody(request));
-}
 
 const cookieJar = {
   cookies: [],
@@ -279,9 +182,9 @@ const request = {
   protocol: 'HTTP/1.1',
   method: 'POST',
   path: `/hello/world?${queryString}`,
-  headers: {
-    'User-Agent': 'Secret Agent 0.0.7'
-  },
+  headers: [
+    { key: 'User-Agent', value: 'Secret Agent 0.0.7' }
+  ],
   cookies: cookieJar.getActiveCookies(),
   contentType: 'application/x-www-form-urlencoded',
   body: {
@@ -294,36 +197,15 @@ bodyEncoderMiddleware(request);
 commonHeaderEncoderMiddleware(request);
 cookieEncoderMiddleware(request);
 
-const encodedRequest = encodeRequest(request);
+const httpRequestFormatter = new HttpRequestFormatter();
 
-// socket.send(encodedRequest);
-
-// const raw = new ReadableStream({
-//   start(controller) {
-//     const encoder = new TextEncoder();
-//     controller.enqueue(encoder.encode(encodedRequest));
-//     controller.close();
-//   },
-//   pull(controller) {
-//     console.log('pull');
-//   },
-//   cancel() {
-//     console.log('cancel');
-//   }
-// });
-
-const httpRequestParser = new HttpRequestParser();
-const encoder = new TextEncoder();
-
-console.log(encodedRequest);
-
-httpRequestParser.onHttpRequest = async (request) => {
-  console.log('Got request:', request);
-  const body = await request.getBody();
-  console.log('Got body:', body);
+httpRequestFormatter.onData = (data) => httpRequestParser.addData(data);
+httpRequestFormatter.onEnd = () => {
+  console.log('Finished formatting request');
+  // httpRequestParser.end();
 };
 
-httpRequestParser.addData(encoder.encode(encodedRequest));
+httpRequestFormatter.format(request);
 
 // const lines = raw.pipeThrough(xform).getReader();
 
