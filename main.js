@@ -62,44 +62,43 @@ requestHandler.useMiddleware(sessionMiddleware);
 requestHandler.useMiddleware(queryStringDecoderMiddleware);
 requestHandler.useMiddleware(applicationMiddleware);
 
-const httpRequestParser = new HttpRequestParser();
+const httpRequestParser = new HttpRequestParser({
+  async onHttpRequest(request) {
+    console.log('Got request:', request);
 
-httpRequestParser.onHttpRequest = async (request) => {
-  console.log('Got request:', request);
+    const body = await request.getBody();
 
-  const body = await request.getBody();
+    console.log('body:', body);
 
-  console.log('body:', body);
+    const response = {
+      protocol: 'HTTP/1.1',
+      statusCode: 200,
+      statusText: 'OK',
+      headers: [
+        { key: 'Server', value: 'Chippewa/0.0.0' }
+      ]
+    };
 
-  const response = {
-    protocol: 'HTTP/1.1',
-    statusCode: 200,
-    statusText: 'OK',
-    headers: [
-      { key: 'Server', value: 'Chippewa/0.0.0' }
-    ]
-  };
+    await requestHandler.invokeMiddleware(request, response);
 
-  await requestHandler.invokeMiddleware(request, response);
+    console.log('Returning response', response);
 
-  console.log('Returning response', response);
+    bodyEncoderMiddleware(response);
+    commonHeaderEncoderMiddleware(response);
 
-  bodyEncoderMiddleware(response);
-  commonHeaderEncoderMiddleware(response);
+    const httpResponseFormatter = new HttpResponseFormatter({
+      onData(data) {
+        const decoder = new TextDecoder();
+        console.log('data:', JSON.stringify(decoder.decode(data)));
+      },
+      onEnd() {
+        console.log('--END--');
+      }
+    });
 
-  const httpResponseFormatter = new HttpResponseFormatter();
-
-  httpResponseFormatter.onData = (data) => {
-    const decoder = new TextDecoder();
-    console.log('data:', JSON.stringify(decoder.decode(data)));
-  };
-
-  httpResponseFormatter.onEnd = () => {
-    console.log('--END--');
-  };
-
-  httpResponseFormatter.format(response);
-};
+    httpResponseFormatter.format(response);
+  }
+});
 
 const cookieJar = new CookieJar();
 cookieJar.setCookie('foo', new Date(Date.now() + 1000));
@@ -128,13 +127,15 @@ bodyEncoderMiddleware(request);
 commonHeaderEncoderMiddleware(request);
 cookieEncoderMiddleware(request);
 
-const httpRequestFormatter = new HttpRequestFormatter();
-
-httpRequestFormatter.onData = (data) => httpRequestParser.addData(data);
-httpRequestFormatter.onEnd = () => {
-  console.log('Finished formatting request');
-  // httpRequestParser.end();
-};
+const httpRequestFormatter = new HttpRequestFormatter({
+  onData(data) {
+     httpRequestParser.addData(data);
+  },
+  onEnd() {
+    console.log('Finished formatting request');
+    // httpRequestParser.end();
+  }
+});
 
 httpRequestFormatter.format(request);
 
