@@ -154,20 +154,20 @@ httpRequestFormatter.format(request);
 
 // readNextLine();
 
-// const clientSocket = new Socket();
-// const serverSocket = new Socket();
+// const clientSocket = new Socket({
+//   onReceive(data) {
+//     console.log('Client received', data);
+//   }
+// });
+
+// const serverSocket = new Socket({
+//   onReceive(data) {
+//     console.log('Server received', data);
+//     serverSocket.send('Pong');
+//   }
+// });
 
 // serverSocket.listen('foo');
-// serverSocket.onReceive = (data) => {
-//   console.log('Server received', data);
-//   serverSocket.send('Pong');
-// };
-
-// clientSocket.connect('foo');
-// clientSocket.onReceive = (data) => {
-//   console.log('Client received', data);
-// };
-
 // clientSocket.connect('foo');
 // clientSocket.send('Some data');
 
