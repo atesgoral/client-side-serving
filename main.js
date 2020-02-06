@@ -7,8 +7,9 @@ import { queryStringDecoderMiddleware } from './lib/middleware/queryStringMiddle
 import { encodeParams as urlEncodeParams } from './lib/url.js';
 
 import { HttpRequestParser } from './lib/httpRequestParser.js';
+import { HttpResponseParser } from './lib/httpResponseParser.js';
 import { HttpRequestFormatter } from './lib/httpRequestFormatter.js';
-import { HttpRequestParserStream } from './lib/httpRequestParserStream.js';
+//import { HttpRequestParserStream } from './lib/httpRequestParserStream.js';
 import { HttpResponseFormatter } from './lib/httpResponseFormatter.js';
 
 import { CookieJar } from './lib/cookieJar.js';
@@ -65,10 +66,7 @@ requestHandler.useMiddleware(applicationMiddleware);
 const httpRequestParser = new HttpRequestParser({
   async onHttpRequest(request) {
     console.log('Got request:', request);
-
-    const body = await request.getBody();
-
-    console.log('body:', body);
+    console.log('Body:', await request.getBody());
 
     const response = {
       protocol: 'HTTP/1.1',
@@ -81,18 +79,26 @@ const httpRequestParser = new HttpRequestParser({
 
     await requestHandler.invokeMiddleware(request, response);
 
-    console.log('Returning response', response);
+    console.log('Returning response:', response);
 
     bodyEncoderMiddleware(response);
     commonHeaderEncoderMiddleware(response);
 
+    const httpResponseParser = new HttpResponseParser({
+      async onHttpResponse(response) {
+        console.log('Got response:', response);
+        console.log('Body:', await response.getBody());
+      },
+      onError(error) {
+
+      }
+    })
+
     const httpResponseFormatter = new HttpResponseFormatter({
       onData(data) {
-        const decoder = new TextDecoder();
-        console.log('data:', JSON.stringify(decoder.decode(data)));
+        httpResponseParser.addData(data);
       },
       onEnd() {
-        console.log('--END--');
       }
     });
 
@@ -132,7 +138,6 @@ const httpRequestFormatter = new HttpRequestFormatter({
      httpRequestParser.addData(data);
   },
   onEnd() {
-    console.log('Finished formatting request');
     // httpRequestParser.end();
   }
 });
