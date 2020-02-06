@@ -51,14 +51,14 @@ const requestHandler = {
 // @todo rename to router middleware?
 function applicationMiddleware(_, response) {
   response.body = 'Hello World!';
-  response.headers['Content-Type'] = 'text/plain';
-  response.headers['Content-Length'] = response.body.length;
+  response.contentType = 'text/plain';
   return false;
 }
 
+requestHandler.useMiddleware(commonHeaderDecoderMiddleware);
 requestHandler.useMiddleware(cookieDecoderMiddleware);
 requestHandler.useMiddleware(sessionMiddleware);
-requestHandler.useMiddleware(bodyDecoderMiddleware);
+// requestHandler.useMiddleware(bodyDecoderMiddleware);
 requestHandler.useMiddleware(queryStringDecoderMiddleware);
 requestHandler.useMiddleware(applicationMiddleware);
 
@@ -125,25 +125,32 @@ const httpRequestParser = new HttpRequestParser();
 
 httpRequestParser.onHttpRequest = async (request) => {
   console.log('Got request:', request);
+
   const body = await request.getBody();
-  console.log('Got body:', body);
+
+  console.log('body:', body);
 
   const response = {
     protocol: 'HTTP/1.1',
     statusCode: 200,
     statusText: 'OK',
-    headers: {}
+    headers: [
+      { key: 'Server', value: 'Chippewa/0.0.0' }
+    ]
   };
 
   await requestHandler.invokeMiddleware(request, response);
 
   console.log('Returning response', response);
 
+  bodyEncoderMiddleware(response);
+  commonHeaderEncoderMiddleware(response);
+
   const httpResponseFormatter = new HttpResponseFormatter();
 
   httpResponseFormatter.onData = (data) => {
     const decoder = new TextDecoder();
-    console.log(JSON.stringify(decoder.decode(data)));
+    console.log('data:', JSON.stringify(decoder.decode(data)));
   };
 
   httpResponseFormatter.onEnd = () => {
@@ -183,7 +190,7 @@ const request = {
   method: 'POST',
   path: `/hello/world?${queryString}`,
   headers: [
-    { key: 'User-Agent', value: 'Secret Agent 0.0.7' }
+    { key: 'User-Agent', value: 'Secret Agent/0.0.7' }
   ],
   cookies: cookieJar.getActiveCookies(),
   contentType: 'application/x-www-form-urlencoded',
