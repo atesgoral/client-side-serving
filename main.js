@@ -11,6 +11,8 @@ import { HttpRequestFormatter } from './lib/httpRequestFormatter.js';
 import { HttpRequestParserStream } from './lib/httpRequestParserStream.js';
 import { HttpResponseFormatter } from './lib/httpResponseFormatter.js';
 
+import { CookieJar } from './lib/cookieJar.js';
+
 const requestHandler = {
   firstMiddlewareNode: null,
   lastMiddlewareNode: null,
@@ -99,24 +101,7 @@ httpRequestParser.onHttpRequest = async (request) => {
   httpResponseFormatter.format(response);
 };
 
-const cookieJar = {
-  cookies: [],
-  setCookie(value, expiry) {
-    this.cookies.push({ value, expiry });
-  },
-  cullExpiredCookies() {
-    const now = new Date();
-    this.cookies = this.cookies
-      .filter((cookie) => !cookie.expiry || cookie.expiry > now);
-  },
-  getActiveCookies() {
-    const now = new Date();
-    return this.cookies
-      .filter((cookie) => !cookie.expiry || cookie.expiry > now)
-      .map((cookie) => cookie.value);
-  }
-};
-
+const cookieJar = new CookieJar();
 cookieJar.setCookie('foo', new Date(Date.now() + 1000));
 
 const queryString = urlEncodeParams({
